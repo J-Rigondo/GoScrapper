@@ -91,7 +91,7 @@ func getPageCount() int {
 	return pageCount
 }
 
-func getSummoner(selection *goquery.Selection) summoner {
+func getSummoner(selection *goquery.Selection, channel chan<- summoner) {
 	rank := strings.TrimSpace(selection.Find(".summoner > span").Text())
 	rank = strings.TrimLeft(rank, "#")
 	id := strings.TrimSpace(selection.Find(".summoner > a").Text())
@@ -106,12 +106,13 @@ func getSummoner(selection *goquery.Selection) summoner {
 
 	fmt.Println(rank, id, link, point, winRate, topRate, playCount, winCount, topCOunt)
 
-	return summoner{rank,
+	channel <- summoner{rank,
 		id, point, winRate,
 		topRate, playCount, winCount, topCOunt, link}
 }
 
 func getPage(pageNum int) []summoner {
+	channel := make(chan summoner)
 	pageUrl := BASE_URL + "?mode=ranked&region=kr&page=" + strconv.Itoa(pageNum)
 	var summoners []summoner
 
@@ -130,11 +131,15 @@ func getPage(pageNum int) []summoner {
 		log.Fatal(err)
 	}
 
-	doc.Find("table > tbody > tr").Each(func(i int, selection *goquery.Selection) {
-		summoner := getSummoner(selection)
-
-		summoners = append(summoners, summoner)
-
+	searchSummoners := doc.Find("table > tbody > tr")
+	searchSummoners.Each(func(i int, selection *goquery.Selection) {
+		go getSummoner(selection, channel)
 	})
+
+	for i := 0; i < searchSummoners.Length(); i++ {
+		summoner := <-channel
+		summoners = append(summoners, summoner)
+	}
+
 	return summoners
 }
